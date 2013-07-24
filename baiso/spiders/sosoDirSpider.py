@@ -60,7 +60,7 @@ class sosoDirSpider(BaseSpider):
             print 'xxxxxxxxxxxxxxxxxxxxxxxxxx', len(self.detail_list)
             pipe = self.rclient.pipeline()
             for detail in self.detail_list:
-                pipe.sadd('book123', detail)
+                pipe.rpush('sosoDetailSpider:start_urls', detail)
             pipe.execute()
 
 
