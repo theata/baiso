@@ -1,17 +1,19 @@
 from scrapy_redis.spiders import RedisSpider
 import redis
+import hashlib
 
 class sosoDetailSpider(RedisSpider):
-    name = "sosoDetailSpider"
-
+    name = 'soso_details'
+    redis_key = 'soso_details:start_urls'
 
     def __init__(self):
-        self.rclient = redis.StrictRedis(host='localhost', port=6379, db=0)
+        pool = redis.ConnectionPool(host='localhost', port=6379, db=0)
+        self.rclient = redis.Redis(connection_pool=pool)
     
-
-    def parser(self, response):
-        print 'xxxxxxxxxxxxxxxxxxxxx'
-        print response 
-        print 'ooooooooooooooooooooo'
+    def parse(self, response):
+        '''write detail page in redis'''
+        if response.status == 200:
+            hexkey = hashlib.md5(response.url).hexdigest()
+            self.rclient.set(hexkey, response.body)
 
           
