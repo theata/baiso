@@ -5,7 +5,7 @@ from scrapy.http import FormRequest
 from scrapy.selector import HtmlXPathSelector
 from scrapy.http.request import Request
 from scrapy import log
-from ..settings import SOSO_DIR_REQUEST_HEADERS
+#from ..settings import SOSO_DIR_REQUEST_HEADERS
 import redis
 import hashlib
 import copy
@@ -20,7 +20,7 @@ class sosoDirSpider(BaseSpider):
 
     def __init__(self, *args, **kwargs):
         super(sosoDirSpider, self).__init__(*args, **kwargs)
-        #log.start()
+        #log.start('soso_dir.log', log.INFO)
         book_conf = kwargs.get('book_conf')
         self.chapter_links = []
         self.chapter_names = []
@@ -31,11 +31,12 @@ class sosoDirSpider(BaseSpider):
         print self.books
 
     def parse(self, response):
+        log.msg("This is a info", level=log.INFO)
         for book in self.books:
             yield FormRequest.from_response(response,
                     formdata={'key': book},
                     meta = {'book': book},
-                    headers = SOSO_DIR_REQUEST_HEADERS,
+                    #headers = SOSO_DIR_REQUEST_HEADERS,
                     callback = self.after_submit)
 
     def after_submit(self, response):
@@ -44,29 +45,23 @@ class sosoDirSpider(BaseSpider):
         first = hxs.select('//div[contains(@class, "first bdt")]')
         if first:
             brief_link = first.select('a/@href').extract()[0]
-            novel_type = first.select('a/text()').extract()[1]
+            novel_type = first.select('a/text()').extract()[0]
+            print '11111111111111111111'
         else:
             other = hxs.select('//div[contains(@class, "con")]/ul[contains(@class, "list")]/li')[0]
             brief_link = other.select('a/@href').extract()[0]
-            novel_type = other.select('a/text()').extract()[0]
-            novel_type = novel_type.encode('utf-8', 'ignore')
-        pattern = re.compile(r"\[\[\u4e00-\u9fa5\]+\]")
-        match = pattern.match(novel_type)
-        if match:
-            print 'x'*100
-            novel_type = match.group(1).encode('utf-8', 'ignore')
-        else:
-            print 'o'*100
-        print 'brief_link', brief_link
-            #print 'novel_type', novel_type
+            novel_type = other.select('a/text()').extract()[1]
+            print '2222222222222222222222'
+        novel_type = novel_type.encode('utf-8', 'ignore')
+        #print 'novel_type', novel_type
+        novel_type = re.search(r'\[(.*?)\]', novel_type).group(1)
         brief_link = "%s%s" %("http://k.soso.com", brief_link)
-        #novel_type = novel_type.encode('utf-8', 'ignore')[1:-1]
-        print 'novel_type', novel_type
-        #_meta['novel_type'] = novel_type
-        '''yield Request(brief_link, 
+        #print 'novel_type', novel_type, 'brief_link', brief_link
+        _meta['novel_type'] = novel_type
+        yield Request(brief_link, 
             meta = _meta,
-            headers = SOSO_DIR_REQUEST_HEADERS,
-            callback=self.parse_brief)'''
+            #headers = SOSO_DIR_REQUEST_HEADERS,
+            callback=self.parse_brief)
 
 
     def parse_brief(self, response):
@@ -84,7 +79,7 @@ class sosoDirSpider(BaseSpider):
         dir_link = "%s%s" %("http://k.soso.com", dir_link)
         yield Request(dir_link, 
             meta = _meta,
-            headers = SOSO_DIR_REQUEST_HEADERS,
+            #headers = SOSO_DIR_REQUEST_HEADERS,
             callback=self.parse_dir)
     
     def parse_dir(self, response):
@@ -106,34 +101,49 @@ class sosoDirSpider(BaseSpider):
             next_link = "%s%s" %("http://k.soso.com", links[0])
             yield Request(next_link, 
                 meta = _meta,
-                headers = SOSO_DIR_REQUEST_HEADERS,
+                #headers = SOSO_DIR_REQUEST_HEADERS,
                 callback=self.parse_dir)
         else:
             chapter_links = copy.copy(self.chapter_links)
             chapter_names = copy.copy(self.chapter_names)
             chapter_size = len(chapter_links)
-            hexkey = hashlib.md5(_meta['book']).hexdigest() 
-            dir_size = self.rclient.llen(hexkey)
+            chapter_size_key = "%s:%s" %(book, "chapter_size")
+            dir_size = self.rclient.get(chapter_size_key)
             if  dir_size:
-                chapter_links = chapter_links[:chapter_size - dir_size]
-                chapter_names = chapter_names[:chapter_size - dir_size]
                 if chapter_size - dir_size > 0:
-                    log.msg("%s\t%s add new %d chapters" %(book, hexkey, chapter_size-dir_size), level=log.INFO)
+                    chapter_links = chapter_links[:chapter_size - dir_size]
+                    chapter_names = chapter_names[:chapter_size - dir_size]
+                    log.msg("%s\tappend new\t%d\tchapters" %(book, chapter_size-dir_size), level=log.INFO)
+                    self.rclient.set(hex_chapter_size_key, chapter_size)
+                else:
+                    log.msg("%s\tnot update" %(book), level=log.INFO)
             else:
-                log.msg("%s\t%s has %d chapters" %(book, hexkey, chapter_size), level=log.INFO)
-                
-            pipe = self.rclient.pipeline()
-            for chapter_link in chapter_links:
-                pipe.rpush('soso_details:start_urls', chapter_link)
-            d = {'novel_type': _meta['novel_type'],
-                'introduction': _meta['intro'],
-                'chapter_links': chapter_links,
-                'chapter_names': chapter_names
-               }
-            '''dict to json'''
-            value = simplejson.dumps(d)
-            pipe.set(hexkey, value)
+                log.msg("%s\tfirst crawl has\t%d\tchapters" %(book, chapter_size), level=log.INFO)
+                self.rclient.set(chapter_size_key, chapter_size)
+            
+            if not dir_size or (chapter_size - dir_size) > 0:
+                chapter_links_key = "%s:%s" %(book, 'chapter_links')
+                chapter_names_key = "%s:%s" %(book, 'chapter_names')
+                chapter_info_key = "%s:%s" %(book, 'chapter_info')
+                detail_len = self.rclient.llen('soso_details:start_urls')
+                log.msg("detail_len\t%d" %(detail_len), log.INFO)
+                pipe = self.rclient.pipeline()
+                for chapter_link in chapter_links:
+                    pipe.rpush('soso_details:start_urls', chapter_link)
+                    pipe.rpush(chapter_links_key, chapter_link)
+                for chapter_name in chapter_names:
+                    pipe.rpush(chapter_names_key, chapter_name)
+
+                if not dir_size:
+                    d = {'novel_type': _meta['novel_type'],
+                        'introduction': _meta['intro'],
+                    }
+                value = simplejson.dumps(d)
+                pipe.set(chapter_info_key, value)
             pipe.execute()
+
+            detail_len = self.rclient.llen('soso_details:start_urls')
+            log.msg("after crawl %s\tdetail_len\t%d" %(book, detail_len), log.INFO)
 
             self.chapter_links = []
             self.chapter_names = []
