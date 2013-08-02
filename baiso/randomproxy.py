@@ -38,6 +38,6 @@ class RandomProxy(object):
 
     def process_exception(self, request, exception, spider):
         proxy = request.meta['proxy']
-        log.msg('Removing failed proxy <%s>, %d proxies left' % (proxy, len(self.proxies)))
+        log.msg('Removing failed proxy <%s>, %d proxies left' % (proxy, len(self.proxies)), level=log.INFO)
         try: self.proxies.remove(proxy)
         except ValueError: pass

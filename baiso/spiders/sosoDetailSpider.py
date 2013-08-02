@@ -14,6 +14,10 @@ class sosoDetailSpider(RedisSpider):
         '''write detail page in redis'''
         if response.status == 200:
             hexkey = hashlib.md5(response.url).hexdigest()
-            self.rclient.set(hexkey, response.body)
+            self.rclient.set(hexkey, response.body.encode('utf-8', 'ignore'))
+            log.msg("crawl success\t%s" %(response.url,), level=log.INFO)
+        else:
+            log.msg("crawl failure\t%s\t%d" %(response.url, resposne.status), level=log.INFO)
+
 
           

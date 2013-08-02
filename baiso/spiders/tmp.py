@@ -13,12 +13,10 @@ import re
 import simplejson
 #import chardet
 
-CHAPTERS_PER_PAGE = 10
-
 '''soso dir spider'''
 
 class sosoDirSpider(BaseSpider):
-    name = 'soso_dirs'
+    name = 'test'
     start_urls = ['http://k.soso.com/index.jsp']
 
     def __init__(self, *args, **kwargs):
@@ -54,27 +52,26 @@ class sosoDirSpider(BaseSpider):
         first = hxs.select('//div[contains(@class, "first bdt")]')
         if first:
             brief_link = first.select('a/@href').extract()[0]
-            novel_type = first.select('a/text()').extract()
-            novel_chapter_nums = first.select('p[contains(@class, "info")]/text()').extract()[0]
+            novel_type = first.select('a/text()').extract()[0]
+            chapter_nums = first.select('p[contains(@class, "info")]/text()').extract()[0]
         else:
             other = hxs.select('//div[contains(@class, "con")]/ul[contains(@class, "list")]/li')[0]
             brief_link = other.select('a/@href').extract()[0]
-            novel_type = other.select('a/text()').extract()
-            novel_chapter_nums = other.select('p[contains(@class, "info")]/text()').extract()[0]
-
-        novel_type = [elem for elem in novel_type]
-        novel_type = ' '.join(novel_type)
-            
-        novel_chapter_nums = novel_chapter_nums.encode('utf-8', 'ignore')
-        novel_chapter_nums = int(re.search(r'\d+', novel_chapter_nums).group(0))
-        if not (novel_chapter_nums > self.novel_cnums[_meta['book']]):
+            novel_type = other.select('a/text()').extract()[1]
+            chapter_nums = other.select('p[contains(@class, "info")]/text()').extract()[0]
+        chapter_nums = chapter_nums.encode('utf-8', 'ignore')
+        #chapter_nums = int(re.search(r'\[(.*?)\]', chapter_nums).group(1))
+        #tmp_nums = re.search(r'^(\d+)$', chapter_nums)
+        #print 'xxxxxxxxxxxxxxxxx', tmp_nums
+        chapter_nums = int(re.search(r'\d+', chapter_nums).group(0))
+        print 'ooooooooooooooooo', chapter_nums, type(chapter_nums)
+        if not (chapter_nums > self.novel_cnums[_meta['book']]):
             pass
-
         novel_type = novel_type.encode('utf-8', 'ignore')
         novel_type = re.search(r'\[(.*?)\]', novel_type).group(1)
         brief_link = "%s%s" %("http://k.soso.com", brief_link)
         _meta['novel_type'] = novel_type
-        _meta['novel_chapter_nums'] = novel_chapter_nums
+        _meta['cur_index'] = 0
         yield Request(brief_link, 
             meta = _meta,
             #headers = SOSO_DIR_REQUEST_HEADERS,
@@ -109,31 +106,17 @@ class sosoDirSpider(BaseSpider):
             meta = _meta,
             #headers = SOSO_DIR_REQUEST_HEADERS,
             callback=self.extract_dir_url)
-        
-        
+    
     def extract_dir_url(self, response):
         hxs = HtmlXPathSelector(response)
-        
-        try:
-            links = hxs.select('//div[contains(@class, "con")]/div[contains(@class, "page")]/p/a/@href').extract()
-            tags = hxs.select('//div[contains(@class, "con")]/div[contains(@class, "page")]/p/a/text()').extract()
-            next_tag = tags[0].encode('utf-8', 'ignore')
-            if not next_tag == "下一页":
-                print 'a'*20, response.url
-                pass
-            url = "%s%s" %("http://k.soso.com", links[0])
-            novel_chapter_nums = response.meta['novel_chapter_nums']
-            count = novel_chapter_nums / CHAPTERS_PER_PAGE + 1
-            lno = re.findall('lno=\d+', url)[0]
-            pos1 = url.find(lno)
-            pos2 = pos1 + len(lno)
-            dir_urls = ["%slno=%d%s" %(url[:pos1], x, url[pos2:]) for x in range(1, count + 1)]
-            print 'b'*20, dir_urls
-        except:
-            print 'a'*20
-            
-    
-    """def parse_dir(self, response):
+        links = hxs.select('//div[contains(@class, "con")]/div[contains(@class, "page")]/p/a/@href').extract()
+        tags = hxs.select('//div[contains(@class, "con")]/div[contains(@class, "page")]/p/a/text()').extract()
+        next_tag = tags[0].encode('utf-8', 'ignore')
+        if next_tag == "下一页":
+            next_link = "%s%s" %("http://k.soso.com", links[0])
+            print 'a'*30, next_link
+
+    '''def parse_dir(self, response):
         _meta = response.meta
         book = _meta['book']
         log.msg('step\t%s\t%s' %(book, response.url), level=log.INFO)
@@ -142,9 +125,12 @@ class sosoDirSpider(BaseSpider):
         chapter_links = content.select('ul/li/a/@href').extract()
         chapter_names = content.select('ul/li/a/text()').extract()
         log.msg("chapter_links:%d\tchapter_names:%d" %(len(chapter_links), len(chapter_names)), level=log.INFO)
+        #log.msg(">>>> before chapter_links:%d\tchapter_names:%d" %(len(self.chapter_links), len(self.chapter_links)), level=log.INFO)
         tmp = _meta['cur_index']
         _meta['cur_index'] += len(chapter_links)
         if _meta['cur_index'] > self.novel_cnums[book]:
+            #chapter_links = chapter_links[:piece_len]
+            #chapter_names = chapter_names[:piece_len]
             res = self.novel_cnums[book] - tmp
             if res > 0 and res < len(chapter_links):
                 start = res
@@ -173,6 +159,7 @@ class sosoDirSpider(BaseSpider):
             next_link = "%s%s" %("http://k.soso.com", links[0])
             yield Request(next_link, 
                 meta = _meta,
+                #headers = SOSO_DIR_REQUEST_HEADERS,
                 callback=self.parse_dir)
         else:
-            pass"""
+            pass'''
