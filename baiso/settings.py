@@ -21,7 +21,7 @@ COOKIES_ENABLED = True
 COOKIES_DEBUG = True
 RETRY_TIMES = 5
 RETRY_HTTP_CODES = [500, 503, 504, 400, 403, 404, 408]
-RETRY_ENABLE = True 
+RETRY_ENABLE = True
 #DEPTH_LIMIT = 3
 #LOG_FILE = 'crawl.log'
 #LOG_LEVEL = 'INFO'
@@ -47,9 +47,9 @@ DEFAULT_REQUEST_HEADERS = {
     'Accept-Encoding' : 'gzip, deflate',
     'Accept-Language' : 'zh-cn,zh;q=0.8,en-us;q=0.5,en;q=0.3',
     'Connection': 'keep-alive',
-    'Host': 'k.soso.com',
-    #'Host': 'b2.wap.soso.com',
-    'Referer' : 'http://k.soso.com/index.jsp',
+    #'Host': 'k.soso.com',
+    'Host': 'b2.wap.soso.com',
+    #'Referer' : 'http://k.soso.com/index.jsp',
     'User-Agent' : USER_AGENT1,
 }
 
