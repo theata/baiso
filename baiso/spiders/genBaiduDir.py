@@ -5,6 +5,10 @@ from scrapy.http import FormRequest
 from scrapy.selector import HtmlXPathSelector
 from scrapy.http.request import Request
 from scrapy import log
+import redis
+import re
+import urlparse
+import simplejson
 
 '''baidu dir spider'''
 
@@ -12,10 +16,9 @@ from scrapy import log
 class GenBaiduDir(BaseSpider):
     name = 'baidu_dirs'
     start_urls = ['http://wap.baidu.com']
-    #books = ['绝世唐门', '凡人修仙传', '大主宰']
 
     def __init__(self, *args, **kwargs):
-        super(GetBaiduDir, self).__init__(*args, **kwargs)
+        super(GenBaiduDir, self).__init__(*args, **kwargs)
         novel_conf = kwargs.get('novel_conf')
         self.rclient = redis.StrictRedis(host='localhost', port=6379, db=1)
         self.init_novel_data(novel_conf)
@@ -35,35 +38,66 @@ class GenBaiduDir(BaseSpider):
             self.all_novel_chapters_num[novel] = novel_chapters_num
 
     def parse(self, response):
-        for novel in GenBaiduDir.novels:
+        print response.url, response.status
+        for novel in self.novels:
             yield FormRequest.from_response(response,
                 formdata = {'word': novel},
                 meta = {'novel': novel},
                 callback = self.after_submit)
 
     def after_submit(self, response):
-        _meta = response.meta
+        #_meta = response.meta
         hxs = HtmlXPathSelector(response)
-        resitem = hxs.select('//div[contains(@class, "reswrap")]/div/div[contains(@class, resitem)]')[0]
-        pos = response.url.find("s?")
-        if pos == -1:
-            log.msg("can't find novel\t%s" %(_meta['novel']), log=level.INFO)
-        else:
-            head_url = response.url[:pos]
-            tail_url = resitem.select('a/@href').extract()[0]
-            print head_url, tail_url
-            novel_url = ''.join([head_url, tail_url[2:]])
-            #log.msg("get url %(novel_url)s", level=log.INFO, novel_url)
-            yield Request(novel_url,
-                    callback = self.parse_novel)
+        ala_novel_info = hxs.select('//div[contains(@class, "sigma_card_novel")]/div[contains(@class, "ala_novel_info")]')
+        href = ala_novel_info.select('div[contains(@class, "ala_novel_title")]/a/@href').extract()[0]
+        url = response.url
+        try:
+            baiduid = re.search('baiduid=([A-Z0-9]+)', url).group(1)
+        except:
+            log.msg("can not get baiduid", level=log.INFO)
+            pass
+
+        pos1 = url.find('s?')
+        head = url[:pos1]
+
+        pos2 = href.find('tc?') + len('tc?')
+        mid = href[2:pos2]
+
+        dir_url = "%s%s" %(head, mid)
+
+        qsk = ['srd', 'appui', 'ajax', 'alalog', 'gid', 'baiduid', 'ref', 'lid', 'fm', 'order', 'tj', 'sec', 'di', 'src', 'hasRp', 'dir']
+
+        qs_static = {'ajax':'1', 'alalog':'1', 'ref':'www_iphone', 'hasRp':'true', 'dir':'1', 'baiduid':baiduid}
+
+        qs = {}
+        qs.update(qs_static)
+
+        qs_dynamic = urlparse.parse_qs(href[2:])
+        for k,v in qs_dynamic.iteritems():
+            qs[k] = v[0]
+
+        for qw in qsk:
+            if qs.get(qw):
+                dir_url = "%s%s=%s&" %(dir_url, qw, qs.get(qw))
+
+        dir_url = dir_url[:-1]
+
+        print dir_url
+
+
+        yield Request(dir_url,
+            #meta = _meta,
+            callback = self.parse_novel)
 
     def  parse_novel(self, response):
-        hxs = HtmlXPathSelector(response)
-        ori_url = hxs.select('//span[contains(@class, "ori_url")]')
-        print response.status, response.url
-        if not ori_url:
-            print 'empty' * 20
-            pass
+        data = response.body
+        #print 'x'*10, data
+        d = simplejson.loads(data)
+        if d['status']:
+            print 'succcess'
+        else:
+            print 'failed'
+        print d['data']['chapter_num']
 
 
 
